@@ -94,6 +94,14 @@
     white-space: nowrap;
     border-radius: 8px;
   }
+  .linkRow .copiedLabel {
+    color: #d33;
+    font-size: 14px;
+    font-weight: 700;
+    white-space: nowrap;
+    display: none;
+  }
+  .linkRow .copiedLabel.show { display: inline; }
   .progress {
     text-align: center;
     font-size: 13px;
@@ -215,15 +223,15 @@ function addLinkRow(num, link) {
     <span class="num">${num}.</span>
     <span class="linkText">${link}</span>
     <button class="copyBtn" onclick="copyLink(this, '${link}')">Copy</button>
+    <span class="copiedLabel">✓ Copied</span>
   `;
   resultList.appendChild(row);
 }
 
 function copyLink(btn, link) {
   navigator.clipboard.writeText(link).then(() => {
-    const original = btn.textContent;
-    btn.textContent = "Copied!";
-    setTimeout(() => { btn.textContent = original; }, 1500);
+    const label = btn.nextElementSibling;
+    if (label) label.classList.add("show");
   });
 }
 </script>
