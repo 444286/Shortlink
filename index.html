@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Link Shortener</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .card {
+    background: #fff;
+    border-radius: 16px;
+    padding: 32px 24px;
+    max-width: 480px;
+    width: 100%;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  }
+  h1 {
+    text-align: center;
+    font-size: 24px;
+    color: #333;
+    margin-bottom: 8px;
+  }
+  p.sub {
+    text-align: center;
+    color: #888;
+    font-size: 14px;
+    margin-bottom: 24px;
+  }
+  input[type="url"] {
+    width: 100%;
+    padding: 14px;
+    border: 2px solid #e0e0e0;
+    border-radius: 10px;
+    font-size: 15px;
+    outline: none;
+    transition: border 0.2s;
+  }
+  input[type="url"]:focus { border-color: #764ba2; }
+  button {
+    width: 100%;
+    padding: 14px;
+    margin-top: 14px;
+    border: none;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: #fff;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  button:hover { opacity: 0.9; }
+  button:disabled { opacity: 0.6; cursor: not-allowed; }
+  #result {
+    margin-top: 20px;
+    padding: 16px;
+    background: #f5f5fa;
+    border-radius: 10px;
+    display: none;
+  }
+  #result.show { display: block; }
+  #shortUrl {
+    font-size: 16px;
+    font-weight: 600;
+    color: #764ba2;
+    word-break: break-all;
+    display: block;
+    margin-bottom: 10px;
+  }
+  .copyBtn {
+    background: #333;
+    padding: 10px;
+    font-size: 14px;
+    margin-top: 0;
+  }
+  .error {
+    color: #d33;
+    font-size: 13px;
+    margin-top: 10px;
+    text-align: center;
+    display: none;
+  }
+  .error.show { display: block; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>🔗 Link Shortener</h1>
+  <p class="sub">Long link diye short link banan</p>
+
+  <input type="url" id="longUrl" placeholder="https://example.com/your-long-link" required>
+  <button id="shortenBtn" onclick="shortenLink()">Short Link Banao</button>
+
+  <div class="error" id="errorBox"></div>
+
+  <div id="result">
+    <span id="shortUrl"></span>
+    <button class="copyBtn" onclick="copyLink()">Copy Link</button>
+  </div>
+</div>
+
+<script>
+// ==== Firebase Realtime Database config ====
+// Apnar Firebase project er Realtime Database URL ekhane din
+// Example: https://your-project-id-default-rtdb.firebaseio.com
+const FIREBASE_DB_URL = "https://YOUR-PROJECT-ID-default-rtdb.firebaseio.com";
+
+function generateCode(length = 6) {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  let code = "";
+  for (let i = 0; i < length; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+}
+
+function isValidUrl(str) {
+  try {
+    const u = new URL(str);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+async function codeExists(code) {
+  const res = await fetch(`${FIREBASE_DB_URL}/links/${code}.json`);
+  const data = await res.json();
+  return data !== null;
+}
+
+async function shortenLink() {
+  const btn = document.getElementById("shortenBtn");
+  const input = document.getElementById("longUrl");
+  const errorBox = document.getElementById("errorBox");
+  const resultBox = document.getElementById("result");
+  const longUrl = input.value.trim();
+
+  errorBox.classList.remove("show");
+  resultBox.classList.remove("show");
+
+  if (!isValidUrl(longUrl)) {
+    errorBox.textContent = "Sothik URL din (http:// othoba https:// diye shuru hote hobe)";
+    errorBox.classList.add("show");
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = "Banano hocche...";
+
+  try {
+    // Unique code generate kora, collision hole retry
+    let code = generateCode();
+    let tries = 0;
+    while (await codeExists(code) && tries < 5) {
+      code = generateCode();
+      tries++;
+    }
+
+    // Firebase e save kora
+    const saveRes = await fetch(`${FIREBASE_DB_URL}/links/${code}.json`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: longUrl,
+        created: Date.now(),
+        clicks: 0
+      })
+    });
+
+    if (!saveRes.ok) throw new Error("Save failed");
+
+    const shortLink = `${window.location.origin}/${code}`;
+    document.getElementById("shortUrl").textContent = shortLink;
+    resultBox.classList.add("show");
+    input.value = "";
+  } catch (err) {
+    errorBox.textContent = "Kichu vul hoyeche, abar try korun";
+    errorBox.classList.add("show");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Short Link Banao";
+  }
+}
+
+function copyLink() {
+  const text = document.getElementById("shortUrl").textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector(".copyBtn");
+    const original = btn.textContent;
+    btn.textContent = "Copied!";
+    setTimeout(() => { btn.textContent = original; }, 1500);
+  });
+}
+</script>
+
+</body>
+</html>
