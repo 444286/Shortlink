@@ -128,6 +128,13 @@
 </div>
 
 <script>
+const COPY_TEMPLATE = `উইথড্র দিতে কোনো রেফার লাগবেনা, কোনো টাকাও দিতে হবেনা।সম্পুর্ণ ফ্রি কাজ।আবারও বলছি সম্পুর্ণ ফ্রি কাজ এটি।
+
+কাজ শুধু টেলিগ্রামে অ্যাড দেখা।পেমেন্ট বিকাশ নগদে নিতে পারবেন ১ঘন্টার মধ্যেই।
+
+লিংকঃ
+
+`;
 // Firebase Realtime Database URL
 const FIREBASE_DB_URL = "https://shortlink-b2e47-default-rtdb.asia-southeast1.firebasedatabase.app";
 
@@ -217,22 +224,34 @@ async function shortenLink() {
 
 function addLinkRow(num, link) {
   const resultList = document.getElementById("resultList");
+
+  // Copy হবে পুরো message
+  const fullMessage = COPY_TEMPLATE + link;
+
   const row = document.createElement("div");
   row.className = "linkRow";
+
   row.innerHTML = `
     <span class="num">${num}.</span>
     <span class="linkText">${link}</span>
-    <button class="copyBtn" onclick="copyLink(this, '${link}')">Copy</button>
+    <button class="copyBtn">Copy</button>
     <span class="copiedLabel">✓ Copied</span>
   `;
-  resultList.appendChild(row);
-}
 
-function copyLink(btn, link) {
-  navigator.clipboard.writeText(link).then(() => {
-    const label = btn.nextElementSibling;
-    if (label) label.classList.add("show");
+  const btn = row.querySelector(".copyBtn");
+
+  btn.addEventListener("click", () => {
+    navigator.clipboard.writeText(fullMessage).then(() => {
+      const label = btn.nextElementSibling;
+      label.classList.add("show");
+
+      setTimeout(() => {
+        label.classList.remove("show");
+      }, 2000);
+    });
   });
+
+  resultList.appendChild(row);
 }
 </script>
 
