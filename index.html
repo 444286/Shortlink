@@ -238,16 +238,17 @@ function addLinkRow(num, link) {
 
   const btn = row.querySelector(".copyBtn");
 
-  btn.addEventListener("click", () => {
-    navigator.clipboard.writeText(fullMessage).then(() => {
-      const label = btn.nextElementSibling;
-      label.classList.add("show");
+  btn.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(fullMessage);
 
-      setTimeout(() => {
-        label.classList.remove("show");
-      }, 2000);
-    });
-  });
+    const label = btn.nextElementSibling;
+    label.classList.add("show");
+
+  } catch (err) {
+    alert("Copy failed!");
+  }
+});
 
   resultList.appendChild(row);
 }
