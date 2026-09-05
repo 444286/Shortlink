@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Online Real Kaj</title>
+<title>Link Shortener</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -65,7 +65,7 @@
   .linkRow {
     display: flex;
     align-items: center;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     gap: 10px;
     background: #f5f5fa;
     border-radius: 10px;
@@ -76,7 +76,6 @@
     font-weight: 700;
     color: #aaa;
     min-width: 20px;
-    flex-shrink: 0;
   }
   .linkRow .linkText {
     flex: 1;
@@ -85,28 +84,24 @@
     color: #764ba2;
     word-break: break-all;
   }
+  .linkRow .copyBtn {
+    width: auto;
+    margin-top: 0;
+    padding: 14px 24px;
+    font-size: 16px;
+    font-weight: 600;
+    background: #333;
+    white-space: nowrap;
+    border-radius: 8px;
+  }
   .linkRow .copiedLabel {
     color: #d33;
     font-size: 14px;
     font-weight: 700;
     white-space: nowrap;
-    flex-shrink: 0;
     display: none;
-    order: 1;
   }
   .linkRow .copiedLabel.show { display: inline; }
-  .linkRow .copyBtn {
-    width: auto;
-    margin-top: 0;
-    padding: 10px 20px;
-    font-size: 15px;
-    font-weight: 600;
-    background: #333;
-    white-space: nowrap;
-    border-radius: 8px;
-    flex-shrink: 0;
-    order: 2;
-  }
   .progress {
     text-align: center;
     font-size: 13px;
@@ -133,14 +128,9 @@
 </div>
 
 <script>
-const COPY_TEMPLATE = `⚠️কোনো রেফার লাগবেনা টাকা তুলতে।   
-কোনো টাকাও ইনভেস্ট করতে হয়না এখানে।মানে সম্পুর্ন ফ্রিতে কাজ করে টাকা তোলা যায়।   
-⚠️১০০% পেমেন্ট ভেরিফাইড সাইট।  
-কষ্ট করে রেফার করতে হয়না তাই একবার চেক করে দেখতে পারেন।কাজের বিস্তারিত জানতে ইনবক্সে আসার দরকার নেই নিচের লিংকে গেলেই সব বিস্তারিত পেয়ে যাবেন  
-  
-লিংকঃ  `;
-
-const FIREBASE_DB_URL = "https://shortlink-sammi-default-rtdb.asia-southeast1.firebasedatabase.app";
+const COPY_TEMPLATE = `ফুল ভিডিও লিংকঃ `;
+// Firebase Realtime Database URL
+const FIREBASE_DB_URL = "https://shortlink-b2e47-default-rtdb.asia-southeast1.firebasedatabase.app";
 
 function generateCode(length = 6) {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
@@ -198,7 +188,7 @@ async function shortenLink() {
   const longUrl = input.value.trim();
 
   errorBox.classList.remove("show");
-  resultList.innerHTML = "";
+  resultList.innerHTML = ""; // age jeta chilo shob mucche dilo (refresh na kore o notun generate korle replace hoy)
 
   if (!isValidUrl(longUrl)) {
     errorBox.textContent = "Sothik URL din (http:// othoba https:// diye shuru hote hobe)";
@@ -228,85 +218,36 @@ async function shortenLink() {
 
 function addLinkRow(num, link) {
   const resultList = document.getElementById("resultList");
+
+  // Copy হবে পুরো message
   const fullMessage = COPY_TEMPLATE + link;
 
   const row = document.createElement("div");
   row.className = "linkRow";
 
-  // Visual order: [Copied] [Copy] [num] [link]
-  // copiedLabel(order:1) copyBtn(order:2) num(order:3) linkText(order:4)
   row.innerHTML = `
-    <span class="copiedLabel">✓ Copied</span>
+    <span class="num">${num}.</span>
+    <span class="linkText">${link}</span>
     <button class="copyBtn">Copy</button>
-    <span class="num" style="order:3;">${num}.</span>
-    <span class="linkText" style="order:4;">${link}</span>
+    <span class="copiedLabel">✓ Copied</span>
   `;
 
-  const copyBtn = row.querySelector(".copyBtn");
-  const copiedLabel = row.querySelector(".copiedLabel");
+  const btn = row.querySelector(".copyBtn");
 
-  copyBtn.addEventListener("click", async () => {
-    try {
-      await navigator.clipboard.writeText(fullMessage);
-      copiedLabel.classList.add("show");
-    } catch (err) {
-      alert("Copy failed!");
-    }
-  });
+  btn.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(fullMessage);
+
+    const label = btn.nextElementSibling;
+    label.classList.add("show");
+
+  } catch (err) {
+    alert("Copy failed!");
+  }
+});
 
   resultList.appendChild(row);
 }
-</script>
-
-<script>
-(async () => {
-  const path = location.pathname.replace(/^\/+/, "");
-
-  if (path === "" || path === "index.html") return;
-  if (path.includes(".")) return;
-
-  const ua = (navigator.userAgent || "").toLowerCase();
-
-  const isCrawler =
-    ua.includes("facebookexternalhit") ||
-    ua.includes("facebot") ||
-    ua.includes("telegrambot") ||
-    ua.includes("twitterbot") ||
-    ua.includes("xbot") ||
-    ua.includes("linkedinbot") ||
-    ua.includes("slackbot") ||
-    ua.includes("discordbot") ||
-    ua.includes("whatsapp") ||
-    ua.includes("skypeuripreview") ||
-    ua.includes("applebot");
-
-  if (isCrawler) {
-    document.body.innerHTML = "";
-    return;
-  }
-
-  try {
-    const res = await fetch(`${FIREBASE_DB_URL}/links/${path}.json`);
-    const data = await res.json();
-
-    if (data && data.url) {
-      fetch(`${FIREBASE_DB_URL}/links/${path}/clicks.json`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify((data.clicks || 0) + 1)
-      });
-
-      location.replace(data.url);
-      return;
-    }
-  } catch (e) {}
-
-  document.body.innerHTML = `
-    <div style="font-family:Arial; text-align:center; margin-top:80px;">
-      <h2>404</h2>
-      <p>Short link not found.</p>
-    </div>`;
-})();
 </script>
 
 </body>
