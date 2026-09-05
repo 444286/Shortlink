@@ -92,6 +92,7 @@
     white-space: nowrap;
     flex-shrink: 0;
     display: none;
+    order: 1;
   }
   .linkRow .copiedLabel.show { display: inline; }
   .linkRow .copyBtn {
@@ -104,6 +105,7 @@
     white-space: nowrap;
     border-radius: 8px;
     flex-shrink: 0;
+    order: 2;
   }
   .progress {
     text-align: center;
@@ -231,12 +233,13 @@ function addLinkRow(num, link) {
   const row = document.createElement("div");
   row.className = "linkRow";
 
-  // Order: copyBtn → num → linkText → copiedLabel
+  // Visual order: [Copied] [Copy] [num] [link]
+  // copiedLabel(order:1) copyBtn(order:2) num(order:3) linkText(order:4)
   row.innerHTML = `
-    <button class="copyBtn">Copy</button>
-    <span class="num">${num}.</span>
-    <span class="linkText">${link}</span>
     <span class="copiedLabel">✓ Copied</span>
+    <button class="copyBtn">Copy</button>
+    <span class="num" style="order:3;">${num}.</span>
+    <span class="linkText" style="order:4;">${link}</span>
   `;
 
   const copyBtn = row.querySelector(".copyBtn");
