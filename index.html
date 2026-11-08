@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>অনলাইন জব এড ফি ছাড়া</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; min-height: 100%; background: #fff; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    min-height: 100vh; min-height: 100dvh; padding: 0; margin: 0;
+  }
+  .card {
+    background: #fff; border-radius: 0; padding: 24px 22px 12px;
+    max-width: none; width: 100%; min-height: 100vh; min-height: 100dvh;
+    margin: 0; box-shadow: none; display: flex; flex-direction: column;
+  }
+  h1 { text-align: center; font-size: 24px; color: #333; margin-bottom: 8px; }
+  p.sub { text-align: center; color: #888; font-size: 14px; margin-bottom: 24px; }
+  .error { color:#d33; font-size:13px; margin-top:12px; text-align:center; display:none; }
+  .error.show { display:block; }
+  #resultList {
+    margin-top:22px; display:flex; flex:1; min-height:0;
+    flex-direction:column; gap:9px; padding-bottom:0;
+  }
+  .linkRow {
+    display:flex; flex:1 1 0; min-height:0; align-items:center;
+    flex-wrap:nowrap; gap:10px; background:#f5f5fa;
+    border-radius:10px; padding:12px 14px;
+  }
+  .linkRow .num { order:3; font-size:13px; font-weight:700; color:#aaa; min-width:22px; flex-shrink:0; }
+  .linkRow .linkText { order:4; flex:1; min-width:0; font-size:14px; font-weight:600; color:#764ba2; word-break:break-all; }
+  .linkRow .copyBtn {
+    order:2; width:150px; min-width:150px; height:58px; margin:0;
+    padding:0 12px; border:0; border-radius:10px; background:#333;
+    color:#fff; font-size:16px; font-weight:700; cursor:pointer; flex-shrink:0;
+  }
+  .linkRow .copyBtn:disabled { opacity:1; cursor:default; }
+  .linkRow .copiedLabel { order:1; color:#159447; font-size:12px; font-weight:700; white-space:nowrap; display:none; }
+  .linkRow .copiedLabel.show { display:inline; }
+  .status { text-align:center; color:#888; font-size:13px; margin-top:14px; }
+  @media(max-width:380px) {
+    .card { padding:24px 14px 10px; }
+    .linkRow { gap:7px; padding:10px; }
+    .linkRow .copyBtn { width:140px; min-width:140px; height:54px; padding:0 10px; font-size:15px; }
+    .linkRow .linkText { font-size:12px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>🔗 Short Link List</h1>
+  <p class="sub">প্রতিবার সাইটে প্রবেশ বা Refresh করলে নতুন ১০টি ৬ অক্ষরের ইউনিক লিংক তৈরি হবে</p>
+  <div class="status" id="progressBox">নতুন লিংক তৈরি হচ্ছে...</div>
+  <div class="error" id="errorBox"></div>
+  <div id="resultList"></div>
+</div>
+
+<script>
+const FIXED_TARGET_URL = "https://t.me/takardorjabot";
+const LINKS_PER_VISIT = 10;
+const FIREBASE_DB_URL = "https://shortlink-sammi-default-rtdb.asia-southeast1.firebasedatabase.app";
+
+// Firebase POST creates a new server-generated push key for every link.
+// It does not overwrite an existing key, even when multiple visitors refresh together.
+async function createOneShortLink(targetUrl) {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  const length = 6;
+
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const bytes = new Uint8Array(length);
+    crypto.getRandomValues(bytes);
+    const code = Array.from(bytes, b => chars[b % chars.length]).join("");
+
+    const recordUrl = `${FIREBASE_DB_URL}/links/${code}.json`;
+
+    // Read the candidate and its ETag from Firebase.
+    const check = await fetch(recordUrl, {
+      headers: { "X-Firebase-ETag": "true" },
+      cache: "no-store"
+    });
+
+    if (!check.ok) {
+      throw new Error(`Firebase read failed (${check.status})`);
+    }
+
+    const existing = await check.json();
+    const etag = check.headers.get("ETag");
+
+    // If this 6-character code already exists, generate another.
+    if (existing !== null) continue;
+    if (!etag) {
+      throw new Error("Firebase did not return an ETag; check database settings.");
+    }
+
+    // Conditional write: only create if the path is still empty.
+    // This prevents two simultaneous visitors from overwriting the same code.
+    const save = await fetch(recordUrl, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "if-match": etag
+      },
+      body: JSON.stringify({
+        url: targetUrl,
+        created: Date.now(),
+        clicks: 0
+      })
+    });
+
+    // Another request may have claimed this code after our read.
+    if (save.status === 412) continue;
+
+    if (!save.ok) {
+      throw new Error(`Firebase save failed (${save.status})`);
+    }
+
+    // Verify the saved record before returning the short URL.
+    const verify = await fetch(recordUrl, { cache: "no-store" });
+    if (!verify.ok) {
+      throw new Error(`Firebase verification failed (${verify.status})`);
+    }
+
+    const savedData = await verify.json();
+    if (!savedData || savedData.url !== targetUrl) {
+      throw new Error("Saved link verification failed");
+    }
+
+    return `${window.location.origin}/${code}`;
+  }
+
+  throw new Error("Could not generate a unique 6-character code after 100 attempts.");
+}
+
+function createFullPost(link) {
+  return `⚠️কমেন্ট করে ইনকাম⚠️
+ফেসবুকে সময় নষ্ট না করে ফেসবুককেই কাজে লাগিয়ে টাকা ইনকাম করুন। প্রতিদিন শুধু ফেসবুকে কমেন্ট করে আপনিও ৪০০-৫০০ইনকাম করে নিজের হাতখরচ চালাতে পারবেন। পেমেন্ট পাবেন ১০০% আমিও টাকা তুলেছি এখান থেকে। 
+সাইট লিংকঃ 🔗
+${link}
+
+সাথে কাজ ভালো হলে কোম্পানির পক্ষ থেকে আছে বড় বড় পেজে মডারেটর হওয়ার সুযোগ🥰`;
+}
+
+async function copyText(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (_) {}
+  }
+
+  try {
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.setAttribute("readonly", "");
+    area.style.position = "fixed";
+    area.style.left = "-9999px";
+    area.style.top = "0";
+    document.body.appendChild(area);
+    area.focus();
+    area.select();
+    const ok = document.execCommand("copy");
+    area.remove();
+    return ok;
+  } catch (_) {
+    return false;
+  }
+}
+
+function addLinkRow(num, link) {
+  const resultList = document.getElementById("resultList");
+  const row = document.createElement("div");
+  row.className = "linkRow";
+
+  const number = document.createElement("span");
+  number.className = "num";
+  number.textContent = `${num}.`;
+
+  const linkText = document.createElement("span");
+  linkText.className = "linkText";
+  linkText.textContent = link;
+
+  const copied = document.createElement("span");
+  copied.className = "copiedLabel";
+  copied.textContent = "✓ Copied";
+
+  const copyBtn = document.createElement("button");
+  copyBtn.className = "copyBtn";
+  copyBtn.type = "button";
+  copyBtn.textContent = "Copy";
+
+  copyBtn.addEventListener("click", async () => {
+    if (copyBtn.dataset.copied === "true") return;
+
+    copyBtn.disabled = true;
+    const success = await copyText(createFullPost(link));
+
+    if (success) {
+      copied.classList.add("show");
+      copyBtn.textContent = "Copied";
+      copyBtn.dataset.copied = "true";
+      // Keep the button and its position unchanged after a successful copy.
+    } else {
+      copyBtn.disabled = false;
+      alert("Copy করা যায়নি। আবার চেষ্টা করুন।");
+    }
+  });
+
+  // Preserve the existing row layout and button position.
+  row.append(copied, copyBtn, number, linkText);
+  resultList.appendChild(row);
+}
+
+async function generateLinksOnVisit() {
+  const progress = document.getElementById("progressBox");
+  const errorBox = document.getElementById("errorBox");
+  const resultList = document.getElementById("resultList");
+
+  resultList.replaceChildren();
+  errorBox.classList.remove("show");
+
+  try {
+    for (let i = 1; i <= LINKS_PER_VISIT; i++) {
+      progress.textContent = `লিংক তৈরি হচ্ছে... (${i}/${LINKS_PER_VISIT})`;
+      const shortLink = await createOneShortLink(FIXED_TARGET_URL);
+      addLinkRow(i, shortLink);
+    }
+    progress.textContent = "১০টি নতুন লিংক তৈরি হয়েছে।";
+  } catch (err) {
+    console.error(err);
+    progress.textContent = "";
+    errorBox.textContent =
+      "লিংক তৈরি হয়নি। Firebase Database Rules, Read/Write Permission ও ইন্টারনেট সংযোগ পরীক্ষা করুন, তারপর Refresh দিন।";
+    errorBox.classList.add("show");
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const path = location.pathname.replace(/^\/+/, "");
+  if (path === "" || path === "index.html") generateLinksOnVisit();
+});
+</script>
+
+<script>
+// Short-link redirect handler
+(async () => {
+  const path = location.pathname.replace(/^\/+/, "");
+  if (path === "" || path === "index.html") return;
+  if (path.includes(".")) return;
+
+  const ua = (navigator.userAgent || "").toLowerCase();
+  const isCrawler =
+    ua.includes("facebookexternalhit") ||
+    ua.includes("facebot") ||
+    ua.includes("telegrambot") ||
+    ua.includes("twitterbot") ||
+    ua.includes("xbot") ||
+    ua.includes("linkedinbot") ||
+    ua.includes("slackbot") ||
+    ua.includes("discordbot") ||
+    ua.includes("whatsapp") ||
+    ua.includes("skypeuripreview") ||
+    ua.includes("applebot");
+
+  if (isCrawler) {
+    document.body.innerHTML = "";
+    return;
+  }
+
+  try {
+    const res = await fetch(
+      `${FIREBASE_DB_URL}/links/${encodeURIComponent(path)}.json`,
+      { cache: "no-store" }
+    );
+
+    if (!res.ok) throw new Error(`Firebase lookup failed (${res.status})`);
+
+    const data = await res.json();
+
+    if (data && data.url) {
+      // Increment click count without blocking the redirect.
+      fetch(`${FIREBASE_DB_URL}/links/${encodeURIComponent(path)}/clicks.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify((Number(data.clicks) || 0) + 1),
+        keepalive: true
+      }).catch(() => {});
+
+      location.replace(data.url);
+      return;
+    }
+  } catch (e) {
+    console.error(e);
+  }
+
+  document.body.innerHTML = `
+    <div style="font-family:Arial;text-align:center;margin-top:80px;">
+      <h2>404</h2>
+      <p>Short link not found.</p>
+    </div>`;
+})();
+</script>
+
+</body>
+</html>
